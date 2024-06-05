@@ -3,7 +3,9 @@ using namespace System.Net
 Function Invoke-AddUserBulk {
     <#
     .FUNCTIONALITY
-    Entrypoint
+        Entrypoint
+    .ROLE
+        Identity.User.ReadWrite
     #>
     [CmdletBinding()]
     param($Request, $TriggerMetadata)
@@ -16,7 +18,7 @@ Function Invoke-AddUserBulk {
         Write-Host 'PowerShell HTTP trigger function processed a request.'
         try {
             $password = if ($userobj.password) { $userobj.password } else { New-passwordString }
-            $UserprincipalName = "$($UserObj.mailNickName)@$($UserObj.domain)"
+            $UserprincipalName = "$($userobj.mailNickName)@$($userobj.domain)"
             $BodyToship = $userobj
             #Remove domain from body to ship
             $BodyToship = $BodyToship | Select-Object * -ExcludeProperty password, domain
@@ -27,16 +29,17 @@ Function Invoke-AddUserBulk {
             if ($userobj.businessPhones) { $bodytoShip.businessPhones = @($userobj.businessPhones) }
             $bodyToShip = ConvertTo-Json -Depth 10 -InputObject $BodyToship -Compress
             Write-Host "Our body to ship is $bodyToShip"
-            $GraphRequest = New-GraphPostRequest -uri 'https://graph.microsoft.com/beta/users' -tenantid $TenantFilter -type POST -body $BodyToship -verbose
+            $GraphRequest = New-GraphPostRequest -uri 'https://graph.microsoft.com/beta/users' -tenantid $TenantFilter -type POST -body $BodyToship
+            Write-Host "Graph request is $GraphRequest"
             Write-LogMessage -user $request.headers.'x-ms-client-principal' -API $APINAME -tenant $($TenantFilter) -message "Created user $($userobj.displayname) with id $($GraphRequest.id) " -Sev 'Info'
-            $results.add("Created user $($UserprincipalName). Password is $password")
+            $results.add("Created user $($UserprincipalName). Password is $password") | Out-Null
         } catch {
             Write-LogMessage -user $request.headers.'x-ms-client-principal' -API $APINAME -tenant $($TenantFilter) -message "Failed to create user. Error:$($_.Exception.Message)" -Sev 'Error'
             $body = $results.add("Failed to create user. $($_.Exception.Message)" )
         }
     }
     $body = [pscustomobject] @{
-        'Results'  = @($results) 
+        'Results'  = @($results)
         'Username' = $UserprincipalName
         'Password' = $password
         'CopyFrom' = $copyFromResults
